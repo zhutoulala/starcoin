@@ -407,6 +407,6 @@ pub fn apply_blocks(
         };
     }
     let use_time = SystemTime::now().duration_since(start_time)?;
-    println!("apply blocks use time: {:?}", use_time.as_nanos());
+    println!("apply blocks use time: {:?}", use_time.as_secs());
     Ok(())
 }

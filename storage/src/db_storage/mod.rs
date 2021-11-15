@@ -167,8 +167,9 @@ impl DBStorage {
     }
 
     fn default_write_options() -> WriteOptions {
-        let mut opts = WriteOptions::new();
-        opts.set_sync(true);
+        let opts = WriteOptions::new();
+        // use nonsync
+        // opts.set_sync(true);
         opts
     }
 
@@ -176,6 +177,8 @@ impl DBStorage {
         let mut db_opts = Options::default();
         db_opts.set_max_open_files(config.max_open_files);
         db_opts.set_max_total_wal_size(config.max_total_wal_size);
+        db_opts.set_wal_bytes_per_sync(config.wal_bytes_per_sync);
+        db_opts.set_bytes_per_sync(config.bytes_per_sync);
         db_opts
     }
     fn iter_with_direction(
