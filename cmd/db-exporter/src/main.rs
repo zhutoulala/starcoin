@@ -26,7 +26,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::SystemTime;
+use std::time::{Instant, SystemTime};
 use structopt::StructOpt;
 
 pub fn export<W: std::io::Write>(
@@ -305,8 +305,8 @@ fn main() -> anyhow::Result<()> {
             Default::default(),
             None,
         )?;
-
-        let result = db.get(option.cf_name.as_str(), option.block_hash.to_vec())?;
+        let timer = Instant::now();
+        let result = db.get(option.cf_name.as_str(), option.block_hash.to_vec(), timer)?;
         if result.is_some() {
             println!("{} block_hash {} exist", option.cf_name, option.block_hash);
         } else {

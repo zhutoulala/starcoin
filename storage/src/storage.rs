@@ -13,31 +13,32 @@ use std::convert::TryInto;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::Arc;
+use std::time::Instant;
 
 /// Type alias to improve readability.
 pub type ColumnFamilyName = &'static str;
 
 #[allow(clippy::upper_case_acronyms)]
 pub trait KVStore: Send + Sync {
-    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>>;
-    fn multiple_get(&self, keys: Vec<Vec<u8>>) -> Result<Vec<Option<Vec<u8>>>> {
+    fn get(&self, key: &[u8], timer: Instant) -> Result<Option<Vec<u8>>>;
+    fn multiple_get(&self, keys: Vec<Vec<u8>>, timer: Instant) -> Result<Vec<Option<Vec<u8>>>> {
         //TODO optimize
-        keys.into_iter().map(|k| self.get(k.as_slice())).collect()
+        keys.into_iter().map(|k| self.get(k.as_slice(), timer)).collect()
     }
-    fn put(&self, key: Vec<u8>, value: Vec<u8>) -> Result<()>;
-    fn contains_key(&self, key: Vec<u8>) -> Result<bool>;
-    fn remove(&self, key: Vec<u8>) -> Result<()>;
-    fn write_batch(&self, batch: WriteBatch) -> Result<()>;
+    fn put(&self, key: Vec<u8>, value: Vec<u8>, timer: Instant) -> Result<()>;
+    fn contains_key(&self, key: Vec<u8>, timer: Instant) -> Result<bool>;
+    fn remove(&self, key: Vec<u8>, timer: Instant) -> Result<()>;
+    fn write_batch(&self, batch: WriteBatch, timer: Instant) -> Result<()>;
     fn get_len(&self) -> Result<u64>;
     fn keys(&self) -> Result<Vec<Vec<u8>>>;
 }
 
 pub trait InnerStore: Send + Sync {
-    fn get(&self, prefix_name: &str, key: Vec<u8>) -> Result<Option<Vec<u8>>>;
-    fn put(&self, prefix_name: &str, key: Vec<u8>, value: Vec<u8>) -> Result<()>;
-    fn contains_key(&self, prefix_name: &str, key: Vec<u8>) -> Result<bool>;
-    fn remove(&self, prefix_name: &str, key: Vec<u8>) -> Result<()>;
-    fn write_batch(&self, prefix_name: &str, batch: WriteBatch) -> Result<()>;
+    fn get(&self, prefix_name: &str, key: Vec<u8>, timer: Instant) -> Result<Option<Vec<u8>>>;
+    fn put(&self, prefix_name: &str, key: Vec<u8>, value: Vec<u8>, timer: Instant) -> Result<()>;
+    fn contains_key(&self, prefix_name: &str, key: Vec<u8>, timer: Instant) -> Result<bool>;
+    fn remove(&self, prefix_name: &str, key: Vec<u8>, timer: Instant) -> Result<()>;
+    fn write_batch(&self, prefix_name: &str, batch: WriteBatch, timer: Instant) -> Result<()>;
     fn get_len(&self) -> Result<u64>;
     fn keys(&self) -> Result<Vec<Vec<u8>>>;
 }
@@ -112,20 +113,20 @@ impl StorageInstance {
 }
 
 impl InnerStore for StorageInstance {
-    fn get(&self, prefix_name: &str, key: Vec<u8>) -> Result<Option<Vec<u8>>> {
+    fn get(&self, prefix_name: &str, key: Vec<u8>, timer: Instant) -> Result<Option<Vec<u8>>> {
         match self {
-            StorageInstance::CACHE { cache } => cache.get(prefix_name, key),
-            StorageInstance::DB { db } => db.get(prefix_name, key),
+            StorageInstance::CACHE { cache } => cache.get(prefix_name, key, timer),
+            StorageInstance::DB { db } => db.get(prefix_name, key, timer),
             StorageInstance::CacheAndDb { cache, db } => {
                 // first get from cache
                 // if from cache get non-existent, query from db
-                if let Ok(Some(cache_obj)) = cache.get_obj(prefix_name, key.clone()) {
+                if let Ok(Some(cache_obj)) = cache.get_obj(prefix_name, key.clone(), timer) {
                     match cache_obj {
                         CacheObject::Value(value) => Ok(Some(value)),
                         CacheObject::None => Ok(None),
                     }
                 } else {
-                    match db.get(prefix_name, key)? {
+                    match db.get(prefix_name, key, timer)? {
                         Some(value) => {
                             // cache.put_obj(prefix_name, key, CacheObject::Value(value.clone()))?;
                             Ok(Some(value))
@@ -141,52 +142,52 @@ impl InnerStore for StorageInstance {
         }
     }
 
-    fn put(&self, prefix_name: &str, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
+    fn put(&self, prefix_name: &str, key: Vec<u8>, value: Vec<u8>, timer: Instant) -> Result<()> {
         match self {
-            StorageInstance::CACHE { cache } => cache.put(prefix_name, key, value),
-            StorageInstance::DB { db } => db.put(prefix_name, key, value),
+            StorageInstance::CACHE { cache } => cache.put(prefix_name, key, value, timer),
+            StorageInstance::DB { db } => db.put(prefix_name, key, value, timer),
             StorageInstance::CacheAndDb { cache, db } => db
-                .put(prefix_name, key.clone(), value.clone())
-                .and_then(|_| cache.put_obj(prefix_name, key, CacheObject::Value(value))),
+                .put(prefix_name, key.clone(), value.clone(), timer)
+                .and_then(|_| cache.put_obj(prefix_name, key, CacheObject::Value(value), timer)),
         }
     }
 
-    fn contains_key(&self, prefix_name: &str, key: Vec<u8>) -> Result<bool> {
+    fn contains_key(&self, prefix_name: &str, key: Vec<u8>, timer: Instant) -> Result<bool> {
         match self {
-            StorageInstance::CACHE { cache } => cache.contains_key(prefix_name, key),
-            StorageInstance::DB { db } => db.contains_key(prefix_name, key),
+            StorageInstance::CACHE { cache } => cache.contains_key(prefix_name, key, timer),
+            StorageInstance::DB { db } => db.contains_key(prefix_name, key, timer),
             StorageInstance::CacheAndDb { cache, db } => {
-                match cache.get_obj(prefix_name, key.clone()) {
+                match cache.get_obj(prefix_name, key.clone(), timer) {
                     Ok(Some(cache_obj)) => match cache_obj {
                         CacheObject::Value(_value) => Ok(true),
                         CacheObject::None => Ok(false),
                     },
-                    _ => db.contains_key(prefix_name, key),
+                    _ => db.contains_key(prefix_name, key, timer),
                 }
             }
         }
     }
 
-    fn remove(&self, prefix_name: &str, key: Vec<u8>) -> Result<()> {
+    fn remove(&self, prefix_name: &str, key: Vec<u8>, timer: Instant) -> Result<()> {
         match self {
-            StorageInstance::CACHE { cache } => cache.remove(prefix_name, key),
-            StorageInstance::DB { db } => db.remove(prefix_name, key),
+            StorageInstance::CACHE { cache } => cache.remove(prefix_name, key, timer),
+            StorageInstance::DB { db } => db.remove(prefix_name, key, timer),
             StorageInstance::CacheAndDb { cache, db } => {
-                match db.remove(prefix_name, key.clone()) {
-                    Ok(_) => cache.remove(prefix_name, key),
+                match db.remove(prefix_name, key.clone(), timer) {
+                    Ok(_) => cache.remove(prefix_name, key, timer),
                     _ => bail!("db storage remove error."),
                 }
             }
         }
     }
 
-    fn write_batch(&self, prefix_name: &str, batch: WriteBatch) -> Result<()> {
+    fn write_batch(&self, prefix_name: &str, batch: WriteBatch, timer: Instant) -> Result<()> {
         match self {
-            StorageInstance::CACHE { cache } => cache.write_batch(prefix_name, batch),
-            StorageInstance::DB { db } => db.write_batch(prefix_name, batch),
+            StorageInstance::CACHE { cache } => cache.write_batch(prefix_name, batch, timer),
+            StorageInstance::DB { db } => db.write_batch(prefix_name, batch, timer),
             StorageInstance::CacheAndDb { cache, db } => {
-                match db.write_batch(prefix_name, batch.clone()) {
-                    Ok(_) => cache.write_batch_obj(prefix_name, batch),
+                match db.write_batch(prefix_name, batch.clone(), timer) {
+                    Ok(_) => cache.write_batch_obj(prefix_name, batch, timer),
                     Err(err) => bail!("write batch db error: {}", err),
                 }
             }
@@ -243,24 +244,24 @@ impl<CF> KVStore for InnerStorage<CF>
 where
     CF: ColumnFamily,
 {
-    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        self.instance.get(self.prefix_name, key.to_vec())
+    fn get(&self, key: &[u8], timer: Instant) -> Result<Option<Vec<u8>>> {
+        self.instance.get(self.prefix_name, key.to_vec(), timer)
     }
 
-    fn put(&self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
-        self.instance.put(self.prefix_name, key, value)
+    fn put(&self, key: Vec<u8>, value: Vec<u8>, timer: Instant) -> Result<()> {
+        self.instance.put(self.prefix_name, key, value, timer)
     }
 
-    fn contains_key(&self, key: Vec<u8>) -> Result<bool> {
-        self.instance.contains_key(self.prefix_name, key)
+    fn contains_key(&self, key: Vec<u8>, timer: Instant) -> Result<bool> {
+        self.instance.contains_key(self.prefix_name, key, timer)
     }
 
-    fn remove(&self, key: Vec<u8>) -> Result<()> {
-        self.instance.remove(self.prefix_name, key)
+    fn remove(&self, key: Vec<u8>, timer: Instant) -> Result<()> {
+        self.instance.remove(self.prefix_name, key, timer)
     }
 
-    fn write_batch(&self, batch: WriteBatch) -> Result<()> {
-        self.instance.write_batch(self.prefix_name, batch)
+    fn write_batch(&self, batch: WriteBatch, timer: Instant) -> Result<()> {
+        self.instance.write_batch(self.prefix_name, batch, timer)
     }
 
     fn get_len(&self) -> Result<u64> {
@@ -461,16 +462,18 @@ where
     S: ColumnFamily<Key = K, Value = V>,
 {
     fn get(&self, key: K) -> Result<Option<V>> {
-        match KVStore::get(self.get_store(), key.encode_key()?.as_slice())? {
+        let timer = Instant::now();
+        match KVStore::get(self.get_store(), key.encode_key()?.as_slice(), timer)? {
             Some(value) => Ok(Some(<V>::decode_value(value.as_slice())?)),
             None => Ok(None),
         }
     }
 
     fn multiple_get(&self, keys: Vec<K>) -> Result<Vec<Option<V>>> {
+        let timer = Instant::now();
         let encoded_keys: Result<Vec<Vec<u8>>> =
             keys.into_iter().map(|key| key.encode_key()).collect();
-        let values = KVStore::multiple_get(self.get_store(), encoded_keys?)?;
+        let values = KVStore::multiple_get(self.get_store(), encoded_keys?, timer)?;
         values
             .into_iter()
             .map(|value| match value {
@@ -481,19 +484,23 @@ where
     }
 
     fn put(&self, key: K, value: V) -> Result<()> {
-        KVStore::put(self.get_store(), key.encode_key()?, value.encode_value()?)
+        let timer = Instant::now();
+        KVStore::put(self.get_store(), key.encode_key()?, value.encode_value()?, timer)
     }
 
     fn contains_key(&self, key: K) -> Result<bool> {
-        KVStore::contains_key(self.get_store(), key.encode_key()?)
+        let timer = Instant::now();
+        KVStore::contains_key(self.get_store(), key.encode_key()?, timer)
     }
 
     fn remove(&self, key: K) -> Result<()> {
-        KVStore::remove(self.get_store(), key.encode_key()?)
+        let timer = Instant::now();
+        KVStore::remove(self.get_store(), key.encode_key()?, timer)
     }
 
     fn write_batch(&self, batch: CodecWriteBatch<K, V>) -> Result<()> {
-        KVStore::write_batch(self.get_store(), batch.try_into()?)
+        let timer = Instant::now();
+        KVStore::write_batch(self.get_store(), batch.try_into()?, timer)
     }
 
     fn get_len(&self) -> Result<u64> {

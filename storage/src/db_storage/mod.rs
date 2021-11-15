@@ -12,6 +12,7 @@ use starcoin_config::RocksdbConfig;
 use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::path::Path;
+use std::time::Instant;
 
 #[allow(clippy::upper_case_acronyms)]
 pub struct DBStorage {
@@ -277,15 +278,15 @@ impl<'a> Iterator for SchemaIterator<'a> {
 }
 
 impl InnerStore for DBStorage {
-    fn get(&self, prefix_name: &str, key: Vec<u8>) -> Result<Option<Vec<u8>>> {
-        record_metrics("db", prefix_name, "get", self.metrics.as_ref()).call(|| {
+    fn get(&self, prefix_name: &str, key: Vec<u8>, timer: Instant) -> Result<Option<Vec<u8>>> {
+        record_metrics("db", prefix_name, "get", self.metrics.as_ref(), timer).call(|| {
             let cf_handle = self.get_cf_handle(prefix_name)?;
             let result = self.db.get_cf(cf_handle, key.as_slice())?;
             Ok(result)
         })
     }
 
-    fn put(&self, prefix_name: &str, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
+    fn put(&self, prefix_name: &str, key: Vec<u8>, value: Vec<u8>, timer: Instant) -> Result<()> {
         if let Some(metrics) = self.metrics.as_ref() {
             metrics
                 .storage_item_bytes
@@ -293,7 +294,7 @@ impl InnerStore for DBStorage {
                 .observe((key.len() + value.len()) as f64);
         }
 
-        record_metrics("db", prefix_name, "put", self.metrics.as_ref()).call(|| {
+        record_metrics("db", prefix_name, "put", self.metrics.as_ref(), timer).call(|| {
             let cf_handle = self.get_cf_handle(prefix_name)?;
             self.db
                 .put_cf_opt(cf_handle, &key, &value, &Self::default_write_options())?;
@@ -301,16 +302,16 @@ impl InnerStore for DBStorage {
         })
     }
 
-    fn contains_key(&self, prefix_name: &str, key: Vec<u8>) -> Result<bool> {
-        record_metrics("db", prefix_name, "contains_key", self.metrics.as_ref()).call(|| match self
-            .get(prefix_name, key)
+    fn contains_key(&self, prefix_name: &str, key: Vec<u8>, timer: Instant) -> Result<bool> {
+        record_metrics("db", prefix_name, "contains_key", self.metrics.as_ref(), timer).call(|| match self
+            .get(prefix_name, key, timer)
         {
             Ok(Some(_)) => Ok(true),
             _ => Ok(false),
         })
     }
-    fn remove(&self, prefix_name: &str, key: Vec<u8>) -> Result<()> {
-        record_metrics("db", prefix_name, "remove", self.metrics.as_ref()).call(|| {
+    fn remove(&self, prefix_name: &str, key: Vec<u8>, timer: Instant) -> Result<()> {
+        record_metrics("db", prefix_name, "remove", self.metrics.as_ref(), timer).call(|| {
             let cf_handle = self.get_cf_handle(prefix_name)?;
             self.db.delete_cf(cf_handle, &key)?;
             Ok(())
@@ -318,8 +319,8 @@ impl InnerStore for DBStorage {
     }
 
     /// Writes a group of records wrapped in a WriteBatch.
-    fn write_batch(&self, prefix_name: &str, batch: WriteBatch) -> Result<()> {
-        record_metrics("db", prefix_name, "write_batch", self.metrics.as_ref()).call(|| {
+    fn write_batch(&self, prefix_name: &str, batch: WriteBatch, timer: Instant) -> Result<()> {
+        record_metrics("db", prefix_name, "write_batch", self.metrics.as_ref(), timer).call(|| {
             let mut db_batch = DBWriteBatch::default();
             let cf_handle = self.get_cf_handle(prefix_name)?;
             for (key, write_op) in &batch.rows {

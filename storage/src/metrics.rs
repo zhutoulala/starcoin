@@ -128,8 +128,9 @@ impl<'a> MetricsRecord<'a> {
         key_type: &'a str,
         method: &'a str,
         metrics: Option<&'a StorageMetrics>,
+        timer: Instant,
     ) -> Self {
-        let timer = Instant::now();
+      //  let timer = Instant::now();
         MetricsRecord {
             storage_type,
             key_type,
@@ -178,6 +179,7 @@ pub fn record_metrics<'a>(
     key_type: &'a str,
     method: &'a str,
     metrics: Option<&'a StorageMetrics>,
+    timer: Instant
 ) -> MetricsRecord<'a> {
-    MetricsRecord::new(storage_type, key_type, method, metrics)
+    MetricsRecord::new(storage_type, key_type, method, metrics, timer)
 }

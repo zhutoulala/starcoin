@@ -3,6 +3,7 @@
 
 extern crate chrono;
 
+use std::time::Instant;
 use crate::cache_storage::CacheStorage;
 use crate::db_storage::DBStorage;
 use crate::storage::{CodecKVStore, InnerStore, StorageInstance, ValueCodec};
@@ -23,7 +24,8 @@ fn test_reopen() {
     let value = HashValue::zero();
     {
         let db = DBStorage::new(tmpdir.path(), RocksdbConfig::default(), None).unwrap();
-        db.put(DEFAULT_PREFIX_NAME, key.to_vec(), value.to_vec())
+        let timer = Instant::now();
+        db.put(DEFAULT_PREFIX_NAME, key.to_vec(), value.to_vec(), timer)
             .unwrap();
         assert_eq!(
             db.get(DEFAULT_PREFIX_NAME, key.to_vec()).unwrap(),
@@ -45,7 +47,8 @@ fn test_open_read_only() {
     let db = DBStorage::new(tmpdir.path(), RocksdbConfig::default(), None).unwrap();
     let key = HashValue::random();
     let value = HashValue::zero();
-    let result = db.put(DEFAULT_PREFIX_NAME, key.to_vec(), value.to_vec());
+    let timer = Instant::now();
+    let result = db.put(DEFAULT_PREFIX_NAME, key.to_vec(), value.to_vec(), timer);
     assert!(result.is_ok());
     let path = tmpdir.as_ref().join("starcoindb");
     let db = DBStorage::open_with_cfs(
@@ -56,7 +59,8 @@ fn test_open_read_only() {
         None,
     )
     .unwrap();
-    let result = db.put(DEFAULT_PREFIX_NAME, key.to_vec(), value.to_vec());
+    let timer = Instant::now();
+    let result = db.put(DEFAULT_PREFIX_NAME, key.to_vec(), value.to_vec(), timer);
     assert!(result.is_err());
     let result = db.get(DEFAULT_PREFIX_NAME, key.to_vec()).unwrap();
     assert_eq!(result, Some(value.to_vec()));
