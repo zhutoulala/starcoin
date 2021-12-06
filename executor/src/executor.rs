@@ -2,12 +2,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::Result;
+use once_cell::sync::Lazy;
 use starcoin_types::transaction::{SignedUserTransaction, Transaction, TransactionOutput};
 use starcoin_vm_types::identifier::Identifier;
 use starcoin_vm_types::language_storage::{ModuleId, TypeTag};
 use starcoin_vm_types::{state_view::StateView, vm_status::VMStatus};
 use vm_runtime::metrics::VMMetrics;
 use vm_runtime::starcoin_vm::StarcoinVM;
+
+static mut EXECUTOR_VM: Lazy<StarcoinVM> = Lazy::new(|| {
+    let vm = StarcoinVM::new(None);
+    vm
+});
 
 pub fn execute_transactions(
     chain_state: &dyn StateView,
@@ -34,16 +40,19 @@ fn do_execute_block_transactions(
     block_gas_limit: Option<u64>,
     metrics: Option<VMMetrics>,
 ) -> Result<Vec<TransactionOutput>> {
-    let mut vm = StarcoinVM::new(metrics);
-    let result = vm
-        .execute_block_transactions(chain_state, txns, block_gas_limit)?
-        .into_iter()
-        .map(|(_, output)| {
-            debug! {"{:?}", output};
-            output
-        })
-        .collect();
-    Ok(result)
+    // let mut vm = StarcoinVM::new(metrics.clone());
+    unsafe {
+        EXECUTOR_VM.add_metrics(metrics);
+        let result = EXECUTOR_VM
+            .execute_block_transactions(chain_state, txns, block_gas_limit)?
+            .into_iter()
+            .map(|(_, output)| {
+                debug! {"{:?}", output};
+                output
+            })
+            .collect();
+        Ok(result)
+    }
 }
 
 pub fn validate_transaction(
