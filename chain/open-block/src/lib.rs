@@ -22,6 +22,8 @@ use starcoin_types::{
     U256,
 };
 use std::{convert::TryInto, sync::Arc};
+use std::sync::Mutex;
+use starcoin_vm_runtime::starcoin_vm::StarcoinVM;
 use storage::Store;
 
 pub struct OpenedBlock {
@@ -39,6 +41,7 @@ pub struct OpenedBlock {
     difficulty: U256,
     strategy: ConsensusStrategy,
     vm_metrics: Option<VMMetrics>,
+    vm: Arc<Mutex<StarcoinVM>>,
 }
 
 impl OpenedBlock {
@@ -90,6 +93,7 @@ impl OpenedBlock {
             difficulty,
             strategy,
             vm_metrics,
+            vm: Arc::new(Mutex::new(StarcoinVM::new(None))),
         };
         opened_block.initialize()?;
         Ok(opened_block)
@@ -155,6 +159,7 @@ impl OpenedBlock {
                 txns.clone(),
                 gas_left,
                 self.vm_metrics.clone(),
+                &self.vm,
             )?
         };
 
@@ -201,6 +206,7 @@ impl OpenedBlock {
             &self.state,
             vec![block_metadata_txn],
             self.vm_metrics.clone(),
+            &self.vm,
         )
         .map_err(BlockExecutorError::BlockTransactionExecuteErr)?;
         let output = results.pop().expect("execute txn has output");

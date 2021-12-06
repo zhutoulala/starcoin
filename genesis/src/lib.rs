@@ -30,10 +30,11 @@ use std::fmt::Display;
 use std::fs::{create_dir_all, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 mod errors;
 pub use errors::GenesisError;
+use starcoin_vm_runtime::starcoin_vm::StarcoinVM;
 
 pub static GENESIS_GENERATED_DIR: &str = "generated";
 pub const GENESIS_DIR: Dir = include_dir!("generated");
@@ -163,8 +164,9 @@ impl Genesis {
         let txn = Transaction::UserTransaction(txn);
         let txn_hash = txn.id();
 
+        let vm = Arc::new(Mutex::new(StarcoinVM::new(None)));
         let output =
-            starcoin_executor::execute_transactions(chain_state.as_super(), vec![txn], None)?
+            starcoin_executor::execute_transactions(chain_state.as_super(), vec![txn], None, &vm)?
                 .pop()
                 .expect("Execute output must exist.");
         let (write_set, events, gas_used, status) = output.into_inner();

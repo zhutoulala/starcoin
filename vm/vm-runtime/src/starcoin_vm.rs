@@ -97,6 +97,14 @@ impl StarcoinVM {
         }
     }
 
+    pub fn add_metrics(&mut self, metrics: Option<VMMetrics>) {
+        if self.metrics.is_none() && metrics.is_some() {
+            self.metrics = metrics;
+        } else if self.metrics.is_some() && metrics.is_none() {
+            self.metrics = metrics;
+        }
+    }
+
     pub fn load_configs(&mut self, state: &dyn StateView) -> Result<(), Error> {
         if state.is_genesis() {
             self.vm_config = Some(VMConfig {

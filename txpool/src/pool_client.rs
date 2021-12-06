@@ -5,6 +5,8 @@ use starcoin_executor::VMMetrics;
 use starcoin_state_api::AccountStateReader;
 use starcoin_statedb::ChainStateDB;
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
+use std::sync::Mutex;
+use starcoin_vm_runtime::starcoin_vm::StarcoinVM;
 use storage::Store;
 use types::{
     account_address::AccountAddress,
@@ -53,6 +55,7 @@ impl std::fmt::Debug for NonceCache {
 pub struct CachedSeqNumberClient {
     statedb: Arc<ChainStateDB>,
     cache: NonceCache,
+    vm: Arc<Mutex<StarcoinVM>>,
 }
 
 impl Debug for CachedSeqNumberClient {
@@ -69,6 +72,7 @@ impl CachedSeqNumberClient {
         Self {
             statedb: Arc::new(statedb),
             cache,
+            vm: Arc::new(Mutex::new(StarcoinVM::new(None))),
         }
     }
 
@@ -163,6 +167,7 @@ impl crate::pool::Client for PoolClient {
             self.nonce_client.statedb.as_ref(),
             txn,
             self.vm_metrics.clone(),
+            &self.nonce_client.vm,
         ) {
             None => Ok(checked_txn),
             Some(status) => Err(TransactionError::CallErr(CallError::ExecutionError(status))),

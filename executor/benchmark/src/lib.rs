@@ -27,6 +27,7 @@ use types::{
     block_metadata::BlockMetadata,
     transaction::{Transaction, TransactionPayload},
 };
+use starcoin_vm_runtime::starcoin_vm::StarcoinVM;
 
 struct AccountData {
     public_key: Ed25519PublicKey,
@@ -202,16 +203,19 @@ impl TransactionGenerator {
 struct TxnExecutor<'test> {
     chain_state: &'test dyn ChainState,
     block_receiver: mpsc::Receiver<Vec<Transaction>>,
+    vm : &'test Arc<Mutex<StartcoinVM>>
 }
 
 impl<'test> TxnExecutor<'test> {
     fn new(
         chain_state: &'test dyn ChainState,
         block_receiver: mpsc::Receiver<Vec<Transaction>>,
+        vm : &'test Arc<Mutex<StartcoinVM>>,
     ) -> Self {
         Self {
             chain_state,
             block_receiver,
+            vm
         }
     }
 
@@ -256,6 +260,7 @@ pub fn run_benchmark(
     let net = ChainNetwork::new_test();
     let genesis_txn = Genesis::build_genesis_transaction(&net).unwrap();
     let _txn_info = Genesis::execute_genesis_txn(&chain_state, genesis_txn).unwrap();
+    let vm = Arc::new(Mutex::new(StarcoinVM(None)));
 
     let (block_sender, block_receiver) = mpsc::sync_channel(50 /* bound */);
 
@@ -271,7 +276,7 @@ pub fn run_benchmark(
     let exe_thread = std::thread::Builder::new()
         .name("txn_executor".to_string())
         .spawn(move || {
-            let mut exe = TxnExecutor::new(&chain_state, block_receiver);
+            let mut exe = TxnExecutor::new(&chain_state, block_receiver, &vm);
             exe.run();
         })
         .expect("Failed to spawn transaction executor thread.");

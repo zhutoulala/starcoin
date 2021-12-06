@@ -1,6 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use std::sync::{Arc, Mutex};
 use anyhow::Result;
 use starcoin_types::transaction::{SignedUserTransaction, Transaction, TransactionOutput};
 use starcoin_vm_types::identifier::Identifier;
@@ -13,8 +14,9 @@ pub fn execute_transactions(
     chain_state: &dyn StateView,
     txns: Vec<Transaction>,
     metrics: Option<VMMetrics>,
+    vm: &Arc<Mutex<StarcoinVM>>,
 ) -> Result<Vec<TransactionOutput>> {
-    do_execute_block_transactions(chain_state, txns, None, metrics)
+    do_execute_block_transactions(chain_state, txns, None, metrics, vm)
 }
 
 /// Execute a block transactions with gas_limit,
@@ -24,8 +26,9 @@ pub fn execute_block_transactions(
     txns: Vec<Transaction>,
     block_gas_limit: u64,
     metrics: Option<VMMetrics>,
+    vm: &Arc<Mutex<StarcoinVM>>
 ) -> Result<Vec<TransactionOutput>> {
-    do_execute_block_transactions(chain_state, txns, Some(block_gas_limit), metrics)
+    do_execute_block_transactions(chain_state, txns, Some(block_gas_limit), metrics, vm)
 }
 
 fn do_execute_block_transactions(
@@ -33,8 +36,11 @@ fn do_execute_block_transactions(
     txns: Vec<Transaction>,
     block_gas_limit: Option<u64>,
     metrics: Option<VMMetrics>,
+    vm: &Arc<Mutex<StarcoinVM>>,
 ) -> Result<Vec<TransactionOutput>> {
-    let mut vm = StarcoinVM::new(metrics);
+   // let mut vm = StarcoinVM::new(metrics);
+    let mut vm = vm.lock().unwrap();
+    vm.add_metrics(metrics);
     let result = vm
         .execute_block_transactions(chain_state, txns, block_gas_limit)?
         .into_iter()
@@ -50,8 +56,11 @@ pub fn validate_transaction(
     chain_state: &dyn StateView,
     txn: SignedUserTransaction,
     metrics: Option<VMMetrics>,
+    vm: &Arc<Mutex<StarcoinVM>>,
 ) -> Option<VMStatus> {
-    let mut vm = StarcoinVM::new(metrics);
+    //let mut vm = StarcoinVM::new(metrics);
+    let mut vm = vm.lock().unwrap();
+    vm.add_metrics(metrics);
     vm.verify_transaction(chain_state, txn)
 }
 

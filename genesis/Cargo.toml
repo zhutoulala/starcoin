@@ -30,6 +30,7 @@ starcoin-transaction-builder = { path = "../vm/transaction-builder"}
 stdlib = { path = "../vm/stdlib"}
 bcs-ext = { package="bcs-ext", path = "../commons/bcs_ext" }
 starcoin-chain = { path = "../chain"}
+starcoin-vm-runtime = { path = "../vm/vm-runtime"}
 
 [features]
 default = []

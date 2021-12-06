@@ -8621,6 +8621,7 @@ dependencies = [
  "starcoin-storage",
  "starcoin-transaction-builder",
  "starcoin-types",
+ "starcoin-vm-runtime",
  "starcoin-vm-types",
  "stdlib",
  "stest",
@@ -9071,6 +9072,7 @@ dependencies = [
  "starcoin-storage",
  "starcoin-transaction-builder",
  "starcoin-types",
+ "starcoin-vm-runtime",
  "starcoin-vm-types",
  "stdlib",
  "stest",
@@ -9523,6 +9525,7 @@ dependencies = [
  "starcoin-statedb",
  "starcoin-storage",
  "starcoin-types",
+ "starcoin-vm-runtime",
  "stest",
 ]
 
@@ -10049,6 +10052,7 @@ dependencies = [
  "starcoin-storage",
  "starcoin-txpool-api",
  "starcoin-types",
+ "starcoin-vm-runtime",
  "stdlib",
  "stest",
  "tempfile",

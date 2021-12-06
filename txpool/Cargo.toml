@@ -36,6 +36,7 @@ starcoin-executor={path="../executor"}
 starcoin-config={path="../config"}
 starcoin-service-registry = { path = "../commons/service-registry" }
 network-api = { package = "network-api", path = "../network/api" }
+starcoin-vm-runtime={path="../vm/vm-runtime"}
 
 proptest = { version = "1.0.0", default-features = false, optional = true }
 proptest-derive = { version = "0.3.0", default-features = false, optional = true }

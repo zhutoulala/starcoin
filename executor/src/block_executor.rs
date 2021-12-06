@@ -1,6 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use std::sync::{Arc, Mutex};
 use starcoin_crypto::HashValue;
 use starcoin_state_api::ChainState;
 use starcoin_types::error::BlockExecutorError;
@@ -9,6 +10,7 @@ use starcoin_types::transaction::TransactionStatus;
 use starcoin_types::transaction::{Transaction, TransactionInfo};
 use starcoin_vm_types::contract_event::ContractEvent;
 use vm_runtime::metrics::VMMetrics;
+use vm_runtime::starcoin_vm::StarcoinVM;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BlockExecutedData {
@@ -32,12 +34,14 @@ pub fn block_execute(
     txns: Vec<Transaction>,
     block_gas_limit: u64,
     vm_metrics: Option<VMMetrics>,
+    vm: &Arc<Mutex<StarcoinVM>>
 ) -> ExecutorResult<BlockExecutedData> {
     let txn_outputs = crate::execute_block_transactions(
         chain_state.as_super(),
         txns.clone(),
         block_gas_limit,
         vm_metrics,
+        vm,
     )
     .map_err(BlockExecutorError::BlockTransactionExecuteErr)?;
 

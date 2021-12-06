@@ -42,7 +42,9 @@ use std::cmp::min;
 use std::iter::Extend;
 use std::option::Option::{None, Some};
 use std::{collections::HashMap, sync::Arc};
+use std::sync::Mutex;
 use storage::Store;
+use starcoin_vm_runtime::starcoin_vm::StarcoinVM;
 
 pub struct ChainStatusWithBlock {
     pub status: ChainStatus,
@@ -60,6 +62,7 @@ pub struct BlockChain {
     uncles: HashMap<HashValue, MintedUncleNumber>,
     epoch: Epoch,
     vm_metrics: Option<VMMetrics>,
+    vm : Arc<Mutex<StarcoinVM>>,
 }
 
 impl BlockChain {
@@ -117,6 +120,7 @@ impl BlockChain {
             uncles: HashMap::new(),
             epoch,
             vm_metrics,
+            vm: Arc::new(Mutex::new(StarcoinVM::new(None))),
         };
         watch(CHAIN_WATCH_NAME, "n1251");
         match uncles {
@@ -150,6 +154,7 @@ impl BlockChain {
             None,
             genesis_block,
             None,
+            &Arc::new(Mutex::new(StarcoinVM::new(None)))
         )?;
         Self::new(time_service, executed_block.block.id(), storage, None)
     }
@@ -357,6 +362,7 @@ impl BlockChain {
         parent_status: Option<ChainStatus>,
         block: Block,
         vm_metrics: Option<VMMetrics>,
+        vm: & Arc<Mutex<StarcoinVM>>,
     ) -> Result<ExecutedBlock> {
         let header = block.header();
         debug_assert!(header.is_genesis() || parent_status.is_some());
@@ -387,6 +393,7 @@ impl BlockChain {
             transactions.clone(),
             epoch.block_gas_limit(),
             vm_metrics,
+            vm,
         )?;
         watch(CHAIN_WATCH_NAME, "n22");
         let state_root = executed_data.state_root;
@@ -736,6 +743,7 @@ impl ChainReader for BlockChain {
             Some(self.status.status.clone()),
             verified_block.0,
             self.vm_metrics.clone(),
+             &self.vm,
         )
     }
 
