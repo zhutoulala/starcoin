@@ -36,13 +36,13 @@ impl Default for CacheStorage {
 
 impl InnerStore for CacheStorage {
     fn get(&self, prefix_name: &str, key: Vec<u8>) -> Result<Option<Vec<u8>>> {
-        record_metrics("cache", prefix_name, "get", self.metrics.as_ref()).call(|| {
+       {
             Ok(self
                 .cache
                 .lock()
                 .get(&compose_key(prefix_name.to_string(), key))
                 .and_then(|v| v.into()))
-        })
+        }
     }
 
     fn put(&self, prefix_name: &str, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
@@ -53,33 +53,27 @@ impl InnerStore for CacheStorage {
             compose_key(prefix_name.to_string(), key),
             CacheObject::Value(value),
         );
-        if let Some(metrics) = self.metrics.as_ref() {
-            metrics.cache_items.set(cache.len() as u64);
-        }
         Ok(())
     }
 
     fn contains_key(&self, prefix_name: &str, key: Vec<u8>) -> Result<bool> {
-        record_metrics("cache", prefix_name, "contains_key", self.metrics.as_ref()).call(|| {
+         {
             Ok(self
                 .cache
                 .lock()
                 .contains(&compose_key(prefix_name.to_string(), key)))
-        })
+        }
     }
     fn remove(&self, prefix_name: &str, key: Vec<u8>) -> Result<()> {
         // remove record_metrics for performance, reduce %3 cost
         // record_metrics add in write_batch to reduce Instant::now system call
         let mut cache = self.cache.lock();
         cache.pop(&compose_key(prefix_name.to_string(), key));
-        if let Some(metrics) = self.metrics.as_ref() {
-            metrics.cache_items.set(cache.len() as u64);
-        }
         Ok(())
     }
 
     fn write_batch(&self, prefix_name: &str, batch: WriteBatch) -> Result<()> {
-        record_metrics("cache", prefix_name, "write_batch", self.metrics.as_ref()).call(|| {
+         {
             for (key, write_op) in &batch.rows {
                 match write_op {
                     WriteOp::Value(value) => self.put(prefix_name, key.to_vec(), value.to_vec())?,
@@ -87,7 +81,7 @@ impl InnerStore for CacheStorage {
                 };
             }
             Ok(())
-        })
+        }
     }
 
     fn get_len(&self) -> Result<u64, Error> {
