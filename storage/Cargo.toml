@@ -31,6 +31,7 @@ starcoin-metrics = { path = "../commons/metrics"}
 starcoin-config = { path = "../config"}
 starcoin-uint = { path = "../types/uint"}
 coarsetime = "0.1.20"
+hashbrown = "0.11.2"
 
 [dependencies.rocksdb]
 version = "0.17"

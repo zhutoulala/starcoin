@@ -8,21 +8,83 @@ use anyhow::{Error, Result};
 use lru::LruCache;
 use parking_lot::Mutex;
 use starcoin_config::DEFAULT_CACHE_SIZE;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
+static NUM_SHARD_BITS: usize = 4;
+static NUM_SHARDS: usize = 1 << NUM_SHARD_BITS;
+pub struct ShardLruCache {
+    caches: Vec<Mutex<LruCache<Vec<u8>, Vec<u8>>>>,
+}
+
+impl ShardLruCache {
+    pub fn new(cap: usize) -> Self {
+        let per_shard_cap = (cap + NUM_SHARDS - 1) / NUM_SHARDS;
+        Self {
+            caches: (0..NUM_SHARDS).map(|_|Mutex::new(LruCache::new(per_shard_cap))).collect(),
+        }
+    }
+
+    pub fn put(&self, key: Vec<u8>, value: Vec<u8>) -> Option<Vec<u8>> {
+        let idx = ShardLruCache::get_idx(&key);
+        self.caches[idx].lock().put(key, value)
+    }
+
+    pub fn get(&self, key: &Vec<u8>) -> Option<Vec<u8>> {
+        let idx = ShardLruCache::get_idx(key);
+        self.caches[idx].lock().get(key).cloned()
+    }
+
+    pub fn pop(&self, key: &Vec<u8>) -> Option<Vec<u8>> {
+        let idx = ShardLruCache::get_idx(key);
+        self.caches[idx].lock().pop(key)
+    }
+
+    pub fn len(&self) -> usize {
+        self.caches.iter().fold(0, |x, obj| obj.lock().len() + x)
+    }
+
+    pub fn contains(&self, key: &Vec<u8>) -> bool {
+       let idx = ShardLruCache::get_idx(key);
+        self.caches[idx].lock().contains(key)
+    }
+
+    pub fn keys(&self) -> Vec<Vec<u8>> {
+        let mut all_keys = vec![];
+        for cache in &self.caches {
+            for (key, _) in cache.lock().iter() {
+                all_keys.push(key.to_vec());
+            }
+        }
+        all_keys
+    }
+
+    fn shard(hash: u32) -> u32 {
+        hash >> (32 - NUM_SHARD_BITS)
+    }
+
+    fn get_idx(key: &Vec<u8>) -> usize {
+        let mut hasher = DefaultHasher::new();
+        key.hash(&mut hasher);
+        ShardLruCache::shard(hasher.finish() as u32) as usize
+    }
+}
+
 pub struct CacheStorage {
-    cache: Mutex<LruCache<Vec<u8>, Vec<u8>>>,
+    cache: ShardLruCache,
     metrics: Option<StorageMetrics>,
 }
 
 impl CacheStorage {
     pub fn new(metrics: Option<StorageMetrics>) -> Self {
         CacheStorage {
-            cache: Mutex::new(LruCache::new(DEFAULT_CACHE_SIZE)),
+            cache: ShardLruCache::new(DEFAULT_CACHE_SIZE),
             metrics,
         }
     }
     pub fn new_with_capacity(size: usize, metrics: Option<StorageMetrics>) -> Self {
         CacheStorage {
-            cache: Mutex::new(LruCache::new(size)),
+            cache: ShardLruCache::new(size),
             metrics,
         }
     }
@@ -39,19 +101,16 @@ impl InnerStore for CacheStorage {
         record_metrics("cache", prefix_name, "get", self.metrics.as_ref()).call(|| {
             Ok(self
                 .cache
-                .lock()
-                .get(&compose_key(prefix_name.to_string(), key))
-                .cloned())
+                .get(&compose_key(prefix_name.to_string(), key)))
         })
     }
 
     fn put(&self, prefix_name: &str, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         // remove record_metrics for performance
         // record_metrics add in write_batch to reduce Instant::now system call
-        let mut cache = self.cache.lock();
-        cache.put(compose_key(prefix_name.to_string(), key), value);
+        self.cache.put(compose_key(prefix_name.to_string(), key), value);
         if let Some(metrics) = self.metrics.as_ref() {
-            metrics.cache_items.set(cache.len() as u64);
+            metrics.cache_items.set(self.cache.len() as u64);
         }
         Ok(())
     }
@@ -60,17 +119,15 @@ impl InnerStore for CacheStorage {
         record_metrics("cache", prefix_name, "contains_key", self.metrics.as_ref()).call(|| {
             Ok(self
                 .cache
-                .lock()
                 .contains(&compose_key(prefix_name.to_string(), key)))
         })
     }
     fn remove(&self, prefix_name: &str, key: Vec<u8>) -> Result<()> {
         // remove record_metrics for performance
         // record_metrics add in write_batch to reduce Instant::now system call
-        let mut cache = self.cache.lock();
-        cache.pop(&compose_key(prefix_name.to_string(), key));
+        self.cache.pop(&compose_key(prefix_name.to_string(), key));
         if let Some(metrics) = self.metrics.as_ref() {
-            metrics.cache_items.set(cache.len() as u64);
+            metrics.cache_items.set(self.cache.len() as u64);
         }
         Ok(())
     }
@@ -88,15 +145,11 @@ impl InnerStore for CacheStorage {
     }
 
     fn get_len(&self) -> Result<u64, Error> {
-        Ok(self.cache.lock().len() as u64)
+        Ok(self.cache.len() as u64)
     }
 
     fn keys(&self) -> Result<Vec<Vec<u8>>, Error> {
-        let mut all_keys = vec![];
-        for (key, _) in self.cache.lock().iter() {
-            all_keys.push(key.to_vec());
-        }
-        Ok(all_keys)
+        Ok(self.cache.keys())
     }
 
     fn put_sync(&self, prefix_name: &str, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
