@@ -85,6 +85,7 @@ impl DBStorage {
 
         let mut rocksdb_opts = Self::gen_rocksdb_options(&rocksdb_config);
         rocksdb_opts.enable_statistics();
+        rocksdb_opts.set_stats_persist_period_sec(30);
 
         let db = if readonly {
             Self::open_readonly(&rocksdb_opts, path, column_families.clone())?
