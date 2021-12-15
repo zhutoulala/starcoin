@@ -274,8 +274,16 @@ impl NodeService {
             .registry()
             .and_then(|registry| StorageMetrics::register(registry).ok());
 
+        /*
         let storage = Storage::new(StorageInstance::new_cache_and_db_instance(
             CacheStorage::new_with_capacity(config.storage.cache_size(), storage_metrics.clone()),
+            DBStorage::new(
+                config.storage.dir(),
+                config.storage.rocksdb_config(),
+                storage_metrics,
+            )?,
+        ))?; */
+        let storage = Storage::new(StorageInstance::new_db_instance(
             DBStorage::new(
                 config.storage.dir(),
                 config.storage.rocksdb_config(),
