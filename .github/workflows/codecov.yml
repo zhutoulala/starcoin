@@ -8,7 +8,7 @@ on:
 jobs:
   code_coverage_report:
     name: Generate code coverage report
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - name: checkout
         uses: actions/checkout@v1
