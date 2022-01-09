@@ -35,3 +35,8 @@ jobs:
           file: ./target/codecov/lcov.info
           flags: unittests
           fail_ci_if_error: false
+      - name: Archive code coverage results
+        uses: actions/upload-artifact@v2
+        with:
+          name: code-coverage-report
+          path: ./target/codecov
